@@ -120,7 +120,7 @@ class ShellTest(testtools.TestCase):
         service = mock.Mock()
         profiles = mock.Mock()
         service.profiles.return_value = profiles
-        fields = ['id', 'name', 'type_name', 'created_at']
+        fields = ['id', 'name', 'type', 'created_at']
         args = {
             'limit': 20,
             'marker': 'mark_id',
@@ -535,6 +535,30 @@ class ShellTest(testtools.TestCase):
         sh.do_receiver_create(service, args)
         service.create_receiver.assert_called_once_with(**params)
         mock_show.assert_called_once_with(service, 'FAKE_ID')
+
+    @mock.patch.object(sh, '_show_receiver')
+    def test_do_receiver_update(self, mock_show):
+        service = mock.Mock()
+        args = {
+            'name': 'receiver2',
+            'id': 'receiver_id',
+            'action': 'CLUSTER_SCALE_OUT',
+            'params': {'count': '2'}
+        }
+        args = self._make_args(args)
+        params = {
+            'name': 'receiver2',
+            'action': 'CLUSTER_SCALE_OUT',
+            'params': {'count': '2'}
+        }
+        receiver = mock.Mock()
+        receiver.id = 'receiver_id'
+        service.get_receiver.return_value = receiver
+        sh.do_receiver_update(service, args)
+        service.get_receiver.assert_called_once_with('receiver_id')
+        service.update_receiver.assert_called_once_with(
+            receiver, **params)
+        mock_show(service, receiver_id=receiver.id)
 
     def test_do_receiver_delete(self):
         service = mock.Mock()
@@ -955,6 +979,7 @@ class ShellTest(testtools.TestCase):
         service = mock.Mock()
         args = {
             'profile': 'test_profile',
+            'profile_only': 'false',
             'name': 'CLUSTER1',
             'metadata': ['user=demo'],
             'timeout': 100,
@@ -962,6 +987,7 @@ class ShellTest(testtools.TestCase):
         attrs = copy.deepcopy(args)
         attrs['metadata'] = {'user': 'demo'}
         attrs['profile_id'] = 'test_profile'
+        attrs['profile_only'] = False
         del attrs['profile']
         args = self._make_args(args)
         args.id = 'CID'
@@ -1543,8 +1569,10 @@ class ShellTest(testtools.TestCase):
     @mock.patch.object(utils, 'print_list')
     def test_do_event_list(self, mock_print):
         service = mock.Mock()
-        fields = ['id', 'timestamp', 'obj_type', 'obj_id', 'obj_name',
+        fields = ['id', 'generated_at', 'obj_type', 'obj_id', 'obj_name',
                   'action', 'status', 'level', 'cluster_id']
+        field_labels = ['id', 'timestamp', 'obj_type', 'obj_id', 'obj_name',
+                        'action', 'status', 'level', 'cluster_id']
 
         args = {
             'sort': 'timestamp:asc',
@@ -1569,7 +1597,8 @@ class ShellTest(testtools.TestCase):
         service.events.assert_called_once_with(**queries)
         mock_print.assert_called_once_with(events, fields,
                                            formatters=formatters,
-                                           sortby_index=sortby_index)
+                                           sortby_index=sortby_index,
+                                           field_labels=field_labels)
 
     @mock.patch.object(utils, 'print_dict')
     def test_do_event_show(self, mock_print):
@@ -1661,3 +1690,16 @@ class ShellTest(testtools.TestCase):
                                service, args)
         msg = _('Action not found: fake_id')
         self.assertEqual(msg, six.text_type(ex))
+
+    @mock.patch.object(utils, 'print_list')
+    def test_do_service_list(self, mock_print):
+        service = mock.Mock()
+        fields = ['Binary', 'Host', 'Status', 'State', 'Updated_at',
+                  'Disabled Reason']
+
+        result = mock.Mock()
+        service.services.return_value = result
+        formatters = {}
+        sh.do_service_list(service)
+        mock_print.assert_called_once_with(result, fields,
+                                           formatters=formatters)

@@ -198,6 +198,22 @@ class Client(object):
         """
         return self.service.delete_cluster(cluster, ignore_missing)
 
+    def suspend_cluster(self, cluster, **attrs):
+        """Suspend cluster
+
+        Doc link:
+        http://developer.openstack.org/api-ref-clustering-v1.html#deleteCluster
+        """
+        return self.service.suspend_cluster(cluster, **attrs)
+
+    def resume_cluster(self, cluster, **attrs):
+        """Resume cluster
+
+        Doc link:
+        http://developer.openstack.org/api-ref-clustering-v1.html#deleteCluster
+        """
+        return self.service.resume_cluster(cluster, **attrs)
+
     def cluster_add_nodes(self, cluster, nodes):
         """Add a node to cluster
 
@@ -344,6 +360,35 @@ class Client(object):
         """
         return self.service.delete_node(node, ignore_missing)
 
+    def remove_node(self, node, **params):
+        """Remove node from senlin to nova instance
+
+        Doc link:
+        http://developer.openstack.org/api-ref-clustering-v1.html#nodeAction
+        """
+        return self.service.remove_node(node, **params)
+
+    def set_protect_node(self, node, **params):
+        """Set the node(s) to protected status
+
+        Doc link:
+        http://developer.openstack.org/api-ref-clustering-v1.html#nodeAction
+        """
+        return self.service.set_protect_node(node, **params)
+
+    def remove_protect_node(self, node, **params):
+        """Remove protected status of the node(s)
+
+        Doc link:
+        http://developer.openstack.org/api-ref-clustering-v1.html#nodeAction
+        """
+        return self.service.remove_protect_node(node, **params)
+
+    def reset_node_state(self, node, **params):
+        """Reset state node status
+        """
+        return self.service.reset_node_state(node, **params)
+
     def check_node(self, node, **params):
         """Check node's health status
 
@@ -385,6 +430,14 @@ class Client(object):
         """
         return self.service.get_receiver(receiver)
 
+    def update_receiver(self, receiver, **attrs):
+        """Update receiver
+
+        Doc link:
+        http://developer.openstack.org/api-ref-clustering-v1.html#updateReceiver
+        """
+        return self.service.update_receiver(receiver, **attrs)
+
     def delete_receiver(self, receiver, ignore_missing=True):
         """Delete receiver
 
@@ -425,3 +478,11 @@ class Client(object):
         http://developer.openstack.org/api-ref-clustering-v1.html#showAction
         """
         return self.service.get_action(action)
+
+    def get_service(self, **queries):
+        """List service
+
+        Doc link:
+        http://developer.openstack.org/api-ref-clustering-v1.html#showAction
+        """
+        return self.service.services(**queries)

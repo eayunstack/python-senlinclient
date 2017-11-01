@@ -16,6 +16,7 @@ import threading
 import time
 
 from openstack import exceptions as sdk_exc
+from oslo_utils import strutils
 import six
 
 from senlinclient.common import exc
@@ -105,7 +106,7 @@ def do_profile_type_show(service, args):
 def do_profile_list(service, args=None):
     """List profiles that meet the criteria."""
     show_deprecated('senlin profile-list', 'openstack cluster profile list')
-    fields = ['id', 'name', 'type_name', 'created_at']
+    fields = ['id', 'name', 'type', 'created_at']
     queries = {
         'limit': args.limit,
         'marker': args.marker,
@@ -504,7 +505,9 @@ def _show_cluster(service, cluster_id):
         'metadata': utils.json_formatter,
         'node_ids': utils.list_formatter,
     }
-    utils.print_dict(cluster.to_dict(), formatters=formatters)
+    cluster_attrs = cluster.to_dict()
+    cluster_attrs.pop('is_profile_only')
+    utils.print_dict(cluster_attrs, formatters=formatters)
 
 
 @utils.arg('-p', '--profile', metavar='<PROFILE>', required=True,
@@ -587,6 +590,30 @@ def do_cluster_delete(service, args):
 
     for rid, res in result.items():
         utils.print_action_result(rid, res)
+
+
+@utils.arg('id', metavar='<CLUSTER>', nargs='+',
+           help=_('Name or ID of cluster(s) to suspend.'))
+def do_cluster_suspend(service, args):
+    """Suspend a cluster(s)."""
+    show_deprecated('senlin cluster-suspend', 'openstack cluster suspend')
+
+    for cid in args.id:
+        resp = service.suspend_cluster(cid)
+        print('Cluster suspend request on cluster %(cid)s is accepted by '
+              'action %(action)s.' % {'cid': cid, 'action': resp['action']})
+
+
+@utils.arg('id', metavar='<CLUSTER>', nargs='+',
+           help=_('Name or ID of cluster(s) to suspend.'))
+def do_cluster_resume(service, args):
+    """Resume a cluster(s)."""
+    show_deprecated('senlin cluster-resume', 'openstack cluster resume')
+
+    for cid in args.id:
+        resp = service.resume_cluster(cid)
+        print('Cluster resume request on cluster %(cid)s is accepted by '
+              'action %(action)s.' % {'cid': cid, 'action': resp['action']})
 
 
 def _run_script(node_id, addr, net, addr_type, port, user, ipv6, identity_file,
@@ -742,7 +769,12 @@ def do_cluster_run(service, args):
 
 
 @utils.arg('-p', '--profile', metavar='<PROFILE>',
-           help=_('ID of new profile to use.'))
+           help=_('ID or name of new profile to use.'))
+@utils.arg('-P', '--profile-only', metavar='<BOOLEAN>', default=False,
+           help=_("Whether the cluster should be updated profile only. "
+                  "If false, it will be applied to all existing nodes. "
+                  "If true, any newly created nodes will use the new profile, "
+                  "but existing nodes will not be changed. Default is False."))
 @utils.arg('-t', '--timeout', metavar='<TIMEOUT>',
            help=_('New timeout (in seconds) value for the cluster.'))
 @utils.arg('-M', '--metadata', metavar='<KEY1=VALUE1;KEY2=VALUE2...>',
@@ -761,6 +793,9 @@ def do_cluster_update(service, args):
     attrs = {
         'name': args.name,
         'profile_id': args.profile,
+        'profile_only': strutils.bool_from_string(
+            args.profile_only, strict=True
+        ),
         'metadata': utils.format_parameters(args.metadata),
         'timeout': args.timeout,
     }
@@ -991,7 +1026,7 @@ def do_cluster_policy_list(service, args):
     formatters = {}
     if not args.full_id:
         formatters = {
-            'policy_id': lambda x: x.id[:8]
+            'policy_id': lambda x: x.policy_id[:8]
         }
 
     utils.print_list(policies, fields, formatters=formatters,
@@ -1248,6 +1283,87 @@ def do_node_update(service, args):
 
 
 @utils.arg('id', metavar='<NODE>', nargs='+',
+           help=_('Name or ID of node(s) to remove'))
+def do_node_remove(service, args):
+    """Remove the node(s) from senlin to be nova server"""
+    show_deprecated('senlin node-remove', 'openstack cluster node remove')
+    failure_count = 0
+
+    for nid in args.id:
+        try:
+            service.remove_node(nid)
+        except exc.HTTPNotFound:
+            failure_count += 1
+            print('Node id "%s" not found' % nid)
+    if failure_count > 0:
+        msg = _('Failed to remove some of the specified nodes.')
+        raise exc.CommandError(msg)
+    print('Request accepted')
+
+
+@utils.arg('id', metavar='<NODE>', nargs='+',
+           help=_('ID of node(s) to protect.'))
+def do_node_protect_set(service, args):
+    """Set the node(s) to protected status, then node can't be delete, recover
+    and check.
+    """
+    show_deprecated('senlin node-protect-set',
+                    'openstack cluster node protect set')
+    failure_count = 0
+
+    for nid in args.id:
+        try:
+            service.set_protect_node(nid)
+        except exc.HTTPNotFound:
+            failure_count += 1
+            print('Node id "%s" not found' % nid)
+    if failure_count > 0:
+        msg = _('Failed to set protect some of the specified nodes.')
+        raise exc.CommandError(msg)
+    print('Request accepted')
+
+
+@utils.arg('id', metavar='<NODE>', nargs='+',
+           help=_('ID of node(s) to protect.'))
+def do_node_protect_remove(service, args):
+    """Remove protected status of the node(s)."""
+    show_deprecated('senlin node-protect-remove',
+                    'openstack cluster node protect remove')
+    failure_count = 0
+
+    for nid in args.id:
+        try:
+            service.remove_protect_node(nid)
+        except exc.HTTPNotFound:
+            failure_count += 1
+            print('Node id "%s" not found' % nid)
+    if failure_count > 0:
+        msg = _('Failed to remove protect some of the specified nodes.')
+        raise exc.CommandError(msg)
+    print('Request accepted')
+
+
+@utils.arg('id', metavar='<NODE>', nargs='+',
+           help=_('ID of node(s) to reset state.'))
+def do_node_reset_state(service, args):
+    """Reset state node status."""
+    show_deprecated('senlin node-reset-state',
+                    'openstack cluster node reset state')
+    failure_count = 0
+
+    for nid in args.id:
+        try:
+            service.reset_node_state(nid)
+        except exc.HTTPNotFound:
+            failure_count += 1
+            print('Node id "%s" not found' % nid)
+    if failure_count > 0:
+        msg = _('Failed to reset node some of the specified nodes.')
+        raise exc.CommandError(msg)
+    print('Request accepted')
+
+
+@utils.arg('id', metavar='<NODE>', nargs='+',
            help=_('ID of node(s) to check.'))
 def do_node_check(service, args):
     """Check the node(s)."""
@@ -1394,6 +1510,36 @@ def do_receiver_create(service, args):
     _show_receiver(service, receiver.id)
 
 
+@utils.arg('-n', '--name', metavar='<NAME>',
+           help=_('The new name for the receiver.'))
+@utils.arg('-a', '--action', metavar='<ACTION>',
+           help=_('Name or ID of the targeted action to be triggered. '
+                  'Required if receiver type is webhook.'))
+@utils.arg('-P', '--params', metavar='<"KEY1=VALUE1;KEY2=VALUE2...">',
+           help=_('A dictionary of parameters that will be passed to target '
+                  'action when the receiver is triggered.'),
+           action='append')
+@utils.arg('id', metavar='<receiver>',
+           help=_('Name or ID of receiver to update.'))
+def do_receiver_update(service, args):
+    """Update a receiver."""
+    show_deprecated('senlin receiver-update',
+                    'openstack cluster receiver update')
+    params = {
+        'name': args.name,
+        'action': args.action,
+        'params': utils.format_parameters(args.params)
+    }
+
+    # Find the receiver first, we need its id
+    try:
+        receiver = service.get_receiver(args.id)
+    except sdk_exc.ResourceNotFound:
+        raise exc.CommandError(_('Receiver not found: %s') % args.id)
+    service.update_receiver(receiver, **params)
+    _show_receiver(service, receiver.id)
+
+
 @utils.arg('id', metavar='<RECEIVER>', nargs='+',
            help=_('Name or ID of receiver(s) to delete.'))
 def do_receiver_delete(service, args):
@@ -1439,8 +1585,11 @@ def do_receiver_delete(service, args):
 def do_event_list(service, args):
     """List events."""
     show_deprecated('senlin event-list', 'openstack cluster event list')
-    fields = ['id', 'timestamp', 'obj_type', 'obj_id', 'obj_name', 'action',
+    fields = ['id', 'generated_at', 'obj_type', 'obj_id', 'obj_name', 'action',
               'status', 'level', 'cluster_id']
+
+    field_labels = ['id', 'timestamp', 'obj_type', 'obj_id', 'obj_name',
+                    'action', 'status', 'level', 'cluster_id']
 
     queries = {
         'sort': args.sort,
@@ -1463,7 +1612,7 @@ def do_event_list(service, args):
 
     events = service.events(**queries)
     utils.print_list(events, fields, formatters=formatters,
-                     sortby_index=sortby_index)
+                     sortby_index=sortby_index, field_labels=field_labels)
 
 
 @utils.arg('id', metavar='<EVENT>',
@@ -1555,3 +1704,16 @@ def do_action_show(service, args):
     }
 
     utils.print_dict(action.to_dict(), formatters=formatters)
+
+
+def do_service_list(service, args=None):
+    """Show a list of all running services."""
+    show_deprecated('senlin service-list',
+                    'openstack cluster service list')
+    fields = ['Binary', 'Host', 'Status', 'State', 'Updated_at',
+              'Disabled Reason']
+    queries = {}
+    result = service.services(**queries)
+
+    formatters = {}
+    utils.print_list(result, fields, formatters=formatters)

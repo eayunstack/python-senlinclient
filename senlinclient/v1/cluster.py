@@ -18,6 +18,7 @@ import sys
 import threading
 import time
 
+from oslo_utils import strutils
 from openstack import exceptions as sdk_exc
 from osc_lib.command import command
 from osc_lib import exceptions as exc
@@ -139,6 +140,8 @@ def _show_cluster(senlin_client, cluster_id):
         'node_ids': senlin_utils.list_formatter
     }
     data = cluster.to_dict()
+    if 'is_profile_only' in data:
+        data.pop('is_profile_only')
     columns = sorted(data.keys())
     return columns, utils.get_dict_properties(data, columns,
                                               formatters=formatters)
@@ -230,6 +233,15 @@ class UpdateCluster(command.ShowOne):
             help=_('ID or name of new profile to use')
         )
         parser.add_argument(
+            '--profile-only',
+            default=False, metavar='<boolean>',
+            help=_("Whether the cluster should be updated profile only. "
+                   "If false, it will be applied to all existing nodes. "
+                   "If true, any newly created nodes will use the new profile,"
+                   "but existing nodes will not be changed. Default is False.")
+
+        )
+        parser.add_argument(
             '--timeout',
             metavar='<timeout>',
             help=_('New timeout (in seconds) value for the cluster')
@@ -264,6 +276,10 @@ class UpdateCluster(command.ShowOne):
         attrs = {
             'name': parsed_args.name,
             'profile_id': parsed_args.profile,
+            'profile_only': strutils.bool_from_string(
+                parsed_args.profile_only,
+                strict=True,
+            ),
             'metadata': senlin_utils.format_parameters(parsed_args.metadata),
             'timeout': parsed_args.timeout,
         }
@@ -321,6 +337,62 @@ class DeleteCluster(command.Command):
 
         for rid, res in result.items():
             senlin_utils.print_action_result(rid, res)
+
+
+class SuspendCluster(command.Command):
+    """Suspend the cluster(s)."""
+
+    log = logging.getLogger(__name__ + ".SuspendCluster")
+
+    def get_parser(self, prog_name):
+        parser = super(SuspendCluster, self).get_parser(prog_name)
+        parser.add_argument(
+            'cluster',
+            metavar='<cluster>',
+            nargs='+',
+            help=_('Name or ID of cluster(s) to suspend')
+        )
+        return parser
+
+    def take_action(self, parsed_args):
+        self.log.debug("take_action(%s)", parsed_args)
+        senlin_client = self.app.client_manager.clustering
+        for cid in parsed_args.cluster:
+            try:
+                resp = senlin_client.suspend_cluster(cid)
+            except sdk_exc.ResourceNotFound:
+                raise exc.CommandError(_('Cluster not found: %s') % cid)
+            print('Cluster suspend request on cluster %(cid)s is accepted by '
+                  'action %(action)s.'
+                  % {'cid': cid, 'action': resp['action']})
+
+
+class ResumeCluster(command.Command):
+    """Resume the cluster(s)."""
+
+    log = logging.getLogger(__name__ + ".ResumeCluster")
+
+    def get_parser(self, prog_name):
+        parser = super(ResumeCluster, self).get_parser(prog_name)
+        parser.add_argument(
+            'cluster',
+            metavar='<cluster>',
+            nargs='+',
+            help=_('Name or ID of cluster(s) to resume')
+        )
+        return parser
+
+    def take_action(self, parsed_args):
+        self.log.debug("take_action(%s)", parsed_args)
+        senlin_client = self.app.client_manager.clustering
+        for cid in parsed_args.cluster:
+            try:
+                resp = senlin_client.resume_cluster(cid)
+            except sdk_exc.ResourceNotFound:
+                raise exc.CommandError(_('Cluster not found: %s') % cid)
+            print('Cluster resume request on cluster %(cid)s is accepted by '
+                  'action %(action)s.'
+                  % {'cid': cid, 'action': resp['action']})
 
 
 class ResizeCluster(command.Command):
